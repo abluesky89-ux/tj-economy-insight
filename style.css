@@ -23,8 +23,9 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    height: 100vh;
+    min-height: 100vh;
     margin: 0;
+    padding: 20px 0;
     transition: background-color 0.3s ease, color 0.3s ease;
 }
 
@@ -36,6 +37,8 @@ body {
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
     position: relative;
     transition: background-color 0.3s ease;
+    width: 90%;
+    max-width: 500px;
 }
 
 h1 {
@@ -48,6 +51,7 @@ h1 {
     justify-content: center;
     gap: 15px;
     margin-bottom: 40px;
+    flex-wrap: wrap;
 }
 
 #generate-btn {
@@ -59,10 +63,81 @@ h1 {
     border-radius: 8px;
     cursor: pointer;
     transition: background-color 0.3s ease;
+    width: 100%;
+    margin-bottom: 20px;
 }
 
 #generate-btn:hover {
     background-color: #357abd;
+}
+
+/* Divider */
+.divider {
+    border: 0;
+    height: 1px;
+    background: #e0e0e0;
+    margin: 30px 0;
+}
+
+[data-theme="dark"] .divider {
+    background: #444444;
+}
+
+/* Contact Section */
+.contact-section {
+    text-align: left;
+}
+
+.contact-section h3 {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.contact-form {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.form-group label {
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.form-group input, 
+.form-group textarea {
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background-color: var(--container-background);
+    color: var(--text-color);
+    font-family: inherit;
+}
+
+.form-group textarea {
+    min-height: 100px;
+    resize: vertical;
+}
+
+.submit-btn {
+    background-color: #2ecc71;
+    color: white;
+    border: none;
+    padding: 12px;
+    font-size: 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.submit-btn:hover {
+    background-color: #27ae60;
 }
 
 /* 테마 토글 버튼 스타일 */
