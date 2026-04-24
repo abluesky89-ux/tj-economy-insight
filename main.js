@@ -1,5 +1,7 @@
 const GEMINI_API_KEY = "AIzaSyBFwQ_YAwlxHZWIXMiyqjAwtgH_kBW-m8I";
 const EXCHANGE_RATE_API = "https://open.er-api.com/v6/latest/USD";
+const CACHE_KEY = "tj_news_cache";
+const CACHE_TIME = 30 * 60 * 1000; // 30분 캐시
 
 let newsData = [];
 const termData = [
@@ -16,8 +18,28 @@ const newsTitles = [
     { title: "청년층 생애 첫 주택 구매 비중 역대 최고 기록", cat: 'realestate', catName: '부동산' }
 ];
 
-async function summarizeWithAI(item, index) {
-    const prompt = `News: "${item.title}". 초등학생 수준 요약. JSON format ONLY: {"summary": [{"text": "요약1"}, {"text": "요약2"}, {"text": "요약3"}], "insight": "기사 내용을 아주 쉽게 풀어서 투자자나 일반인에게 주는 실질적인 조언이나 관점(인사이트)을 작성해줘"}`;
+async function fetchAllNewsWithAI() {
+    // 1. 캐시 확인
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (cached) {
+        const { data, timestamp } = JSON.parse(cached);
+        if (Date.now() - timestamp < CACHE_TIME) {
+            console.log("Loading from cache...");
+            return data;
+        }
+    }
+
+    // 2. 통합 질문(Batch) 생성
+    const titlesStr = newsTitles.map((n, i) => `${i+1}. ${n.title}`).join("\n");
+    const prompt = `다음 6개 경제 뉴스 제목을 각각 초등학생 수준으로 3줄 요약하고 인사이트를 적어줘. 
+    반드시 다음 JSON 배열 형식으로만 답해: 
+    [
+      {"summary": [{"text":"요약1"}, {"text":"요약2"}, {"text":"요약3"}], "insight": "인사이트 내용"},
+      ... (총 6개)
+    ]
+    뉴스 제목들:
+    ${titlesStr}`;
+
     try {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
             method: 'POST',
@@ -25,20 +47,24 @@ async function summarizeWithAI(item, index) {
             body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
         });
         const data = await res.json();
-        if (data.candidates && data.candidates[0].content.parts[0].text) {
-            const text = data.candidates[0].content.parts[0].text;
-            const match = text.match(/\{[\s\S]*\}/);
-            if (match) {
-                const result = JSON.parse(match[0]);
-                return {
-                    id: index, category: item.cat, categoryName: item.catName,
-                    title: item.title, summary: result.summary, insight: result.insight, isHero: index === 0
-                };
-            }
+        const text = data.candidates[0].content.parts[0].text;
+        const match = text.match(/\[[\s\S]*\]/);
+        if (match) {
+            const aiResults = JSON.parse(match[0]);
+            const finalData = newsTitles.map((item, idx) => ({
+                ...item,
+                id: idx,
+                summary: aiResults[idx].summary,
+                insight: aiResults[idx].insight,
+                isHero: idx === 0
+            }));
+            
+            // 캐시 저장
+            localStorage.setItem(CACHE_KEY, JSON.stringify({ data: finalData, timestamp: Date.now() }));
+            return finalData;
         }
-        return null;
     } catch (e) {
-        console.error("AI Error:", e);
+        console.error("AI Batch Error:", e);
         return null;
     }
 }
@@ -47,21 +73,18 @@ async function init() {
     updateDate();
     fetchMarketData();
     const container = document.getElementById('news-grid');
-    if (container) container.innerHTML = "<div style='grid-column:1/-1;text-align:center;padding:40px;'><h3>실시간 AI 인사이트를 도출하고 있습니다...</h3><p>병렬 분석 기술로 속도를 높이는 중입니다. (약 3~5초)</p></div>";
+    
+    // 로딩 화면
+    if (container) container.innerHTML = "<div style='grid-column:1/-1;text-align:center;padding:40px;'><h3>초고속 AI 분석 엔진 가동 중...</h3><p>한 번 분석하면 30분 동안 즉시 로딩됩니다.</p></div>";
 
-    const promises = newsTitles.map((item, idx) => summarizeWithAI(item, idx));
-    const results = await Promise.all(promises);
+    const results = await fetchAllNewsWithAI();
     
-    newsData = results.filter(r => r !== null);
-    
-    if (newsData.length === 0) {
-        newsData = newsTitles.map((item, idx) => ({
-            id: idx, category: item.cat, categoryName: item.catName, title: item.title,
-            summary: [{text: '현재 실시간 분석이 일시적으로 지연되고 있습니다.'}], 
-            insight: '새로고침을 하거나 잠시 후 다시 접속해주세요.', isHero: idx === 0
-        }));
+    if (results) {
+        newsData = results;
+        renderNews();
+    } else {
+        container.innerHTML = "<p style='grid-column:1/-1;text-align:center;'>분석 중 오류가 발생했습니다. 잠시 후 새로고침 해주세요.</p>";
     }
-    renderNews();
 }
 
 function renderNews(filter = 'all') {
@@ -84,7 +107,7 @@ function renderNews(filter = 'all') {
             <div class="hero-card">
                 <div class="hero-content">
                     <span class="hero-category">${heroNews.categoryName}</span>
-                    <h2 style="margin:10px 0; font-size: 24px;">${heroNews.title}</h2>
+                    <h2 style="margin:10px 0;">${heroNews.title}</h2>
                     <ul style="margin-bottom:15px; padding-left:20px;">${heroNews.summary.map(s => `<li>${s.text}</li>`).join('')}</ul>
                     <div class="insight-box" style="background: #eef2f7; border-left: 5px solid #3498db;">
                         <b>📢 AI 인사이트:</b> ${heroNews.insight}
@@ -108,8 +131,8 @@ function renderNews(filter = 'all') {
 function fetchMarketData() {
     fetch(EXCHANGE_RATE_API).then(res => res.json()).then(data => {
         const bar = document.getElementById('market-bar');
-        if (bar) bar.innerHTML = `<div style="text-align:center;font-size:12px;padding:5px;color:white;">실시간 환율: 1달러 = <b>${data.rates.KRW.toFixed(2)}원</b> (제공: Open API)</div>`;
-    }).catch(e => console.error(e));
+        if (bar) bar.innerHTML = `<div style="text-align:center;font-size:12px;padding:5px;color:white;">실시간 환율: 1달러 = <b>${data.rates.KRW.toFixed(2)}원</b></div>`;
+    });
 }
 
 function updateDate() {
@@ -121,17 +144,16 @@ window.showPolicy = function(type) {
     const modal = document.getElementById('detail-modal');
     const body = document.getElementById('modal-body');
     const content = {
-        about: "<h2>서비스 소개</h2><p>TJ Economy Insight는 AI로 경제 뉴스를 요약 전달합니다.</p>",
-        privacy: "<h2>개인정보처리방침</h2><p>개인정보를 수집하지 않습니다.</p>",
-        terms: "<h2>이용약관</h2><p>모든 정보는 투자 참고용입니다.</p>",
+        about: "<h2>서비스 소개</h2><p>TJ Economy Insight는 초고속 AI 기술로 경제 뉴스를 요약합니다.</p>",
+        privacy: "<h2>개인정보처리방침</h2><p>정보를 수집하지 않습니다.</p>",
+        terms: "<h2>이용약관</h2><p>투자 책임은 본인에게 있습니다.</p>",
         contact: "<h2>문의하기</h2><p>Email: contact@tjinsight.com</p>"
     };
-    body.innerHTML = content[type] || "내용을 찾을 수 없습니다.";
+    body.innerHTML = content[type];
     modal.style.display = 'block';
 };
 
 document.querySelector('.close-modal').onclick = () => { document.getElementById('detail-modal').style.display = 'none'; };
-
 document.addEventListener('DOMContentLoaded', init);
 document.querySelectorAll('.nav-item').forEach(btn => {
     btn.addEventListener('click', (e) => {
