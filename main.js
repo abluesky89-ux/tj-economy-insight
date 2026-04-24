@@ -1,4 +1,3 @@
-const GEMINI_API_KEY = "AIzaSyBFwQ_YAwlxHZWIXMiyqjAwtgH_kBW-m8I";
 const EXCHANGE_RATE_API = "https://open.er-api.com/v6/latest/USD";
 const NEWS_JSON_URL = "https://api.rss2json.com/v1/api.json?rss_url=https%3A%2F%2Fnews.google.com%2Frss%2Fheadlines%2Fsection%2Ftopic%2FBUSINESS%3Fhl%3Dko%26gl%3DKR%26ceid%3DKR%3Ako";
 const CACHE_KEY = "tj_final_news_cache_v4";
@@ -29,18 +28,16 @@ async function fetchAndAnalyze() {
         const headlines = data.items.slice(0, 6).map(i => i.title.split(" - ")[0]);
         const titlesStr = headlines.map((h, i) => `${i+1}. ${h}`).join("\n");
         
-        const prompt = `Economy News Titles:\n${titlesStr}\n\nTask: Summarize each for kids in 3 lines, provide a detailed practical insight, and assign one category from [macro, stocks, realestate, tech]. 
-        Reply ONLY with JSON array: [{"summary": [{"text":"line1"}, {"text":"line2"}, {"text":"line3"}], "insight": "detailed text", "category": "category_id"}]`;
-
-        const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        // Cloudflare Pages Function 호출
+        const aiRes = await fetch('/api/insight', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ titles: titlesStr })
         });
-        const aiData = await aiRes.json();
-        const match = aiData.candidates[0].content.parts[0].text.match(/\[[\s\S]*\]/);
         
-        if (match) {
-            const results = JSON.parse(match[0]);
+        const results = await aiRes.json();
+        
+        if (results && !results.error) {
             return headlines.map((h, i) => ({
                 id: i, title: h, url: data.items[i].link,
                 category: results[i].category,
@@ -48,7 +45,9 @@ async function fetchAndAnalyze() {
                 summary: results[i].summary, insight: results[i].insight
             }));
         }
-    } catch (e) { console.error("Using fallback"); }
+    } catch (e) { 
+        console.error("Analysis failed, using fallback:", e); 
+    }
     return fallbackData.map((d, i) => ({...d, id: i}));
 }
 
